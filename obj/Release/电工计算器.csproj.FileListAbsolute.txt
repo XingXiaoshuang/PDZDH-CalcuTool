@@ -1,0 +1,10 @@
+H:\PDZDH_CalcuTool\电工计算器\bin\Release\电工计算器.exe.config
+H:\PDZDH_CalcuTool\电工计算器\bin\Release\电工计算器.exe
+H:\PDZDH_CalcuTool\电工计算器\bin\Release\电工计算器.pdb
+H:\PDZDH_CalcuTool\电工计算器\obj\Release\电工计算器.csproj.AssemblyReference.cache
+H:\PDZDH_CalcuTool\电工计算器\obj\Release\电工计算器.main.resources
+H:\PDZDH_CalcuTool\电工计算器\obj\Release\电工计算器.Properties.Resources.resources
+H:\PDZDH_CalcuTool\电工计算器\obj\Release\电工计算器.csproj.GenerateResource.cache
+H:\PDZDH_CalcuTool\电工计算器\obj\Release\电工计算器.csproj.CoreCompileInputs.cache
+H:\PDZDH_CalcuTool\电工计算器\obj\Release\电工计算器.exe
+H:\PDZDH_CalcuTool\电工计算器\obj\Release\电工计算器.pdb
