@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_base">#0D0C11</color>
+    <color name="bg_surface">#16151C</color>
+    <color name="bg_elevated">#1E1D26</color>
+    <color name="border_subtle">#302D3E</color>
+    <color name="text_primary">#ECE9F5</color>
+    <color name="text_second">#948EAC</color>
+    <color name="text_muted">#58546E</color>
+    <color name="accent_purple">#A387FF</color>
+    <color name="accent_teal">#53DAAF</color>
+    <color name="accent_amber">#FFB955</color>
+</resources>

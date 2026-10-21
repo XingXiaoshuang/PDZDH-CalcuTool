@@ -1,0 +1,10 @@
+# build artefacts
+build/
+*.idsig
+.gradle/
+local.properties
+*.iml
+.idea/
+
+# generated icon previews (regenerate with tools/gen_icon.py)
+icon/_*.png
