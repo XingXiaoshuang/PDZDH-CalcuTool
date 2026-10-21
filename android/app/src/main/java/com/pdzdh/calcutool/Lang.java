@@ -51,6 +51,9 @@ final class Lang {
                 case "wechat": return "WeChat";
                 case "copied": return "WeChat ID copied";
                 case "version": return "Version";
+                case "qrSection": return "TERMINAL QR";
+                case "qrScan": return "Scan terminal QR code";
+                case "qrScanSub": return "Reads type / vendor / model / ID / hardware version / date";
                 default: return key;
             }
         }
@@ -93,6 +96,9 @@ final class Lang {
             case "wechat": return "微信";
             case "copied": return "微信号已复制";
             case "version": return "版本";
+            case "qrSection": return "终端二维码";
+            case "qrScan": return "扫描终端二维码";
+            case "qrScanSub": return "读取类型 / 厂商 / 型号 / ID / 硬件版本 / 生产日期";
             default: return key;
         }
     }

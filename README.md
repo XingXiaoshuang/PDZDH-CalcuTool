@@ -16,7 +16,7 @@
 
 ## Android 版
 
-同一套算法与配色的原生安卓实现（`android/`，分支 `android`），纯 Framework + Java，无 Gradle / AndroidX 依赖，APK 约 150 KB。
+同一套算法与配色的原生安卓实现（`android/`，分支 `android`），纯 Framework + Java，无 Gradle / AndroidX 依赖，APK 约 380 KB。
 
 | 输入与相量图 | 计算结果 |
 |---|---|
@@ -25,6 +25,15 @@
 英文界面：
 
 ![Android 英文](android/picture/screen-en-input.png)
+
+### 终端二维码识别
+
+相机扫码读取配电终端二维码，校验六字段后弹窗显示字段定义与内容；
+只接受中文冒号「：」与中文逗号「，」，空格和英文标点一律拦截并提示位置。
+
+| 校验通过 | 校验未通过 |
+|---|---|
+| ![扫码通过](android/picture/scan-ok.png) | ![扫码未通过](android/picture/scan-invalid.png) |
 
 ### 安装
 

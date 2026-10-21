@@ -51,7 +51,7 @@ find "$APP/java" "$OUT/gen" -name '*.java' > "$OUT/sources.txt"
 # --release 8 keeps lambda desugaring valid for minSdk 24. -parameters is required:
 # d8 8.2.x throws an NPE on MethodParameters entries that carry no names.
 if ! "$JAVAC" -J-Duser.language=en -J-Duser.country=US -encoding UTF-8 -nowarn \
-     --release 8 -parameters -classpath "$PLATFORM" -d "$OUT/classes" \
+     --release 8 -parameters -classpath "$PLATFORM;libs/*" -d "$OUT/classes" \
      @"$OUT/sources.txt" > "$OUT/javac.log" 2>&1; then
   cat "$OUT/javac.log" >&2
   echo "javac failed" >&2
@@ -60,6 +60,7 @@ fi
 
 echo "[4/6] d8"
 find "$OUT/classes" -name '*.class' > "$OUT/classes.txt"
+for jar in libs/*.jar; do [ -e "$jar" ] && echo "$jar" >> "$OUT/classes.txt"; done
 "$BT/d8.bat" --release --min-api 24 --lib "$PLATFORM" --output "$OUT/dex" @"$OUT/classes.txt"
 
 echo "[5/6] package"

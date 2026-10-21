@@ -44,6 +44,7 @@ public class MainActivity extends Activity {
     private LinearLayout resultsBox;
     private TextView lblTitle, lblSubtitle, lblInput, lblMag, lblAng, lblResults, lblChart, lblRun, lblNote;
     private TextView lblAbout, lblAuthorKey, lblWechatKey;
+    private TextView lblQr, lblQrTitle, lblQrSub;
     private TextView tagAB, tagBC, tagCA;
     private TextView langBtn;
 
@@ -92,6 +93,7 @@ public class MainActivity extends Activity {
         content.addView(buildChartCard(), margins((int) dp(12)));
         content.addView(buildLineVoltageCard(), margins((int) dp(12)));
         content.addView(buildResultCard(), margins((int) dp(12)));
+        content.addView(buildScanCard(), margins((int) dp(12)));
         content.addView(buildAboutCard(), margins((int) dp(12)));
         scroll.addView(content);
 
@@ -320,6 +322,58 @@ public class MainActivity extends Activity {
         return card;
     }
 
+    private View buildScanCard() {
+        LinearLayout card = card();
+        card.setPadding((int) dp(14), (int) dp(12), (int) dp(14), (int) dp(12));
+
+        lblQr = sectionLabel(Pal.ACCENT_AMBER);
+        card.addView(lblQr);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding((int) dp(10), (int) dp(10), (int) dp(10), (int) dp(10));
+        row.setBackground(ripple(rounded(Pal.BG_ELEVATED, 12, Pal.BORDER_SUBTLE, 1)));
+        row.setOnClickListener(v -> startActivity(
+                new android.content.Intent(this, ScanActivity.class)));
+
+        TextView icon = new TextView(this);
+        icon.setText("\u2317");
+        icon.setTextSize(20);
+        icon.setTextColor(Pal.ACCENT_PURPLE);
+        icon.setTypeface(Typeface.MONOSPACE);
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams((int) dp(34),
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        ip.setMarginEnd((int) dp(6));
+        row.addView(icon, ip);
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+
+        lblQrTitle = new TextView(this);
+        lblQrTitle.setTextColor(Pal.TEXT_PRIMARY);
+        lblQrTitle.setTextSize(13.5f);
+        texts.addView(lblQrTitle);
+
+        lblQrSub = new TextView(this);
+        lblQrSub.setTextColor(Pal.TEXT_MUTED);
+        lblQrSub.setTextSize(9.5f);
+        lblQrSub.setTypeface(Typeface.MONOSPACE);
+        lblQrSub.setPadding(0, (int) dp(2), 0, 0);
+        texts.addView(lblQrSub);
+        row.addView(texts, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView arrow = new TextView(this);
+        arrow.setText("\u203a");
+        arrow.setTextSize(20);
+        arrow.setTextColor(Pal.TEXT_MUTED);
+        row.addView(arrow);
+
+        card.addView(row, margins((int) dp(8)));
+        return card;
+    }
+
     private View buildAboutCard() {
         LinearLayout card = card();
         card.setPadding((int) dp(14), (int) dp(12), (int) dp(14), (int) dp(10));
@@ -426,6 +480,11 @@ public class MainActivity extends Activity {
             lblResults.setText(Lang.t("results"));
             lblChart.setText(Lang.t("chart"));
             lblRun.setText("▶   " + Lang.t("run"));
+        }
+        if (lblQr != null) {
+            lblQr.setText(Lang.t("qrSection"));
+            lblQrTitle.setText(Lang.t("qrScan"));
+            lblQrSub.setText(Lang.t("qrScanSub"));
         }
         if (lblAbout != null) {
             lblAbout.setText(Lang.t("about"));

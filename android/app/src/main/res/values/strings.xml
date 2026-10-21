@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">三相交流分析</string>
+    <string name="scan_title">扫描终端二维码</string>
 </resources>
