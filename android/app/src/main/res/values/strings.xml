@@ -3,5 +3,6 @@
     <string name="app_name">配电工具箱</string>
     <string name="calc_title">三相交流分析</string>
     <string name="comtrade_title">录波分析</string>
+    <string name="game_title">转刀割草</string>
     <string name="scan_title">扫描终端二维码</string>
 </resources>

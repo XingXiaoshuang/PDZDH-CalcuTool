@@ -8,7 +8,10 @@ import android.database.Cursor;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.Settings;
 import android.provider.DocumentsContract;
 import android.view.Gravity;
 import android.view.View;
@@ -26,6 +29,8 @@ import com.pdzdh.calcutool.comtrade.WaveMath;
 import com.pdzdh.calcutool.comtrade.WaveformView;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Locale;
@@ -48,6 +53,7 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
     private ScrollView panelScroll;
     private View chartPlaceholder;
     private TextView btnPrimary, btnProportional;
+    private TextView permHint;
     private TextView cursorSummaryView;
 
     private int mode = MODE_VALUES;
@@ -55,6 +61,7 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
 
     private final TextView[] tabViews = new TextView[4];
     private int u0Ch = -1, i0Ch = -1;
+    private boolean treeListMode = true;
     private com.pdzdh.calcutool.comtrade.SmallCurrentDetector.Result smallResult;
     private Uri pendingCfgUri;
     private float density;
@@ -65,6 +72,12 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         density = getResources().getDisplayMetrics().density;
         setContentView(buildRoot());
         setEmptyState();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        checkStoragePermission();
     }
 
     private float dp(float v) { return v * density; }
@@ -81,6 +94,8 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         });
 
         root.addView(buildHeader());
+        permHint = buildPermHint();
+        root.addView(permHint);
         root.addView(buildInfoBar());
 
         chipRow = new LinearLayout(this);
@@ -170,7 +185,7 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         open.setGravity(Gravity.CENTER);
         open.setPadding((int) dp(12), (int) dp(7), (int) dp(12), (int) dp(7));
         open.setBackground(shape(Pal.ACCENT_PURPLE, 16, 0, 0));
-        open.setOnClickListener(v -> pickCfg());
+        open.setOnClickListener(v -> pickFolder());
         row.addView(open);
 
         header.addView(row);
@@ -179,6 +194,62 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         header.addView(line, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) density)));
         return header;
+    }
+
+    /** 未授予“所有文件访问”时的提示条，点一下去授权。 */
+    private TextView buildPermHint() {
+        TextView t = new TextView(this);
+        t.setText("未授予文件访问权限：选择 cfg 后可能读不到同名 dat · 点此授权");
+        t.setTextColor(Pal.ACCENT_AMBER);
+        t.setTextSize(9.6f);
+        t.setTypeface(Typeface.MONOSPACE);
+        t.setPadding((int) dp(14), (int) dp(7), (int) dp(14), (int) dp(7));
+        t.setBackgroundColor(0x1FFFB955);
+        t.setVisibility(View.GONE);
+        t.setOnClickListener(v -> requestStoragePermission());
+        return t;
+    }
+
+    private boolean hasStoragePermission() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            return Environment.isExternalStorageManager();
+        }
+        return checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void checkStoragePermission() {
+        if (permHint == null) return;
+        if (hasStoragePermission()) {
+            permHint.setVisibility(View.GONE);
+            return;
+        }
+        permHint.setVisibility(View.VISIBLE);
+        // 首次进入录波页主动引导一次
+        android.content.SharedPreferences sp = getSharedPreferences("comtrade", MODE_PRIVATE);
+        if (!sp.getBoolean("perm_asked", false)) {
+            sp.edit().putBoolean("perm_asked", true).apply();
+            requestStoragePermission();
+        }
+    }
+
+    private void requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                Intent i = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                i.setData(Uri.parse("package:" + getPackageName()));
+                startActivity(i);
+            } catch (Exception e) {
+                try {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+                } catch (Exception ignored) {
+                    Toast.makeText(this, "请在系统设置中授予本应用文件访问权限",
+                            Toast.LENGTH_LONG).show();
+                }
+            }
+        } else {
+            requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 5201);
+        }
     }
 
     private View buildPlaceholder() {
@@ -368,8 +439,18 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         d.setPadding(0, (int) dp(8), 0, (int) dp(14));
         card.addView(d);
 
-        card.addView(bigButton("选择 CFG 文件", Pal.ACCENT_PURPLE, 0xFF14111E, v -> pickCfg()));
+        card.addView(bigButton("选择录波文件夹（推荐）", Pal.ACCENT_PURPLE, 0xFF14111E,
+                v -> pickFolder()));
         card.addView(bigButton("加载示例录波", Pal.BG_ELEVATED, Pal.TEXT_PRIMARY, v -> loadSample()));
+
+        TextView single = new TextView(this);
+        single.setText("直接选择单个 cfg 文件（需已授予文件访问权限）");
+        single.setTextColor(Pal.TEXT_MUTED);
+        single.setTextSize(9.4f);
+        single.setTypeface(Typeface.MONOSPACE);
+        single.setPadding((int) dp(2), (int) dp(6), 0, (int) dp(2));
+        single.setOnClickListener(v -> pickCfg());
+        card.addView(single);
 
         analysisBox.addView(card);
     }
@@ -472,7 +553,7 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
                         .setTitle("未自动找到同名 .dat")
                         .setMessage("Android 的文件权限只授予单个文件，因此无法直接读取同目录的 .dat。\n"
                                 + "授权该文件夹后即可自动匹配（只需一次）。")
-                        .setPositiveButton("授权文件夹", (d, w) -> pickTree())
+                        .setPositiveButton("授权文件夹", (d, w) -> pickTreeForSibling())
                         .setNeutralButton("手动选择 .dat", (d, w) -> pickDat())
                         .setNegativeButton("取消", null)
                         .show();
@@ -480,9 +561,17 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
             }
             loadUri(uri, dat);
         } else if (req == REQ_TREE) {
+            getSharedPreferences("comtrade", MODE_PRIVATE).edit()
+                    .putString("folder_uri", uri.toString()).apply();
+            if (treeListMode) {
+                showCfgChooser(uri);
+                return;
+            }
             if (pendingCfgUri == null) return;
             String stem = stemOf(displayName(pendingCfgUri));
-            Uri dat = findInTree(uri, stem + ".dat");
+            Uri dat = findSiblingByChildren(pendingCfgUri, stem + ".dat");
+            if (dat == null) dat = findSiblingByFile(pendingCfgUri, stem + ".dat");
+            if (dat == null) dat = findInTree(uri, stem + ".dat");
             if (dat == null) {
                 new AlertDialog.Builder(this)
                         .setTitle("未找到同名数据文件")
@@ -522,10 +611,10 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         new Thread(() -> {
             try {
                 AssetManager am = getAssets();
-                String base = "sample/BAY01_0024_20240610_113114_840";
+                String base = "sample/BAY01_0001_20260610204052_305";
                 byte[] cfg = readAll(am.open(base + ".cfg"));
                 final ComtradeCase c = ComtradeCase.load(cfg, am.open(base + ".dat"),
-                        "BAY01_0024");
+                        "BAY01_0001_20260610204052_305.cfg");
                 runOnUiThread(() -> bindCase(c));
             } catch (final Exception e) {
                 runOnUiThread(() -> Toast.makeText(this,
@@ -545,6 +634,9 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
     }
 
     private String displayName(Uri uri) {
+        if ("file".equals(uri.getScheme()) && uri.getPath() != null) {
+            return new File(uri.getPath()).getName();
+        }
         Cursor c = null;
         try {
             c = getContentResolver().query(uri, null, null, null, null);
@@ -566,6 +658,8 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         String target = stem + ext;
         Uri byChild = findSiblingByChildren(docUri, target);
         if (byChild != null) return byChild;
+        Uri byFile = findSiblingByFile(docUri, target);
+        if (byFile != null) return byFile;
         return findSiblingByDocId(docUri, target);
     }
 
@@ -596,6 +690,24 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         return null;
     }
 
+    /** 已授予“所有文件访问”时，直接按真实路径读同目录文件，最可靠。 */
+    private Uri findSiblingByFile(Uri docUri, String target) {
+        try {
+            String docId = DocumentsContract.getDocumentId(docUri);
+            int slash = docId.lastIndexOf('/');
+            if (slash <= 0) return null;
+            String sibId = docId.substring(0, slash + 1) + target;
+            int colon = sibId.indexOf(':');
+            if (colon <= 0) return null;
+            if (!"primary".equalsIgnoreCase(sibId.substring(0, colon))) return null;
+            File f = new File(Environment.getExternalStorageDirectory(),
+                    sibId.substring(colon + 1));
+            if (f.exists() && f.canRead()) return Uri.fromFile(f);
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
     /** externalstorage 等 provider 的 documentId 形如 primary:dir/file，可直接换文件名。 */
     private Uri findSiblingByDocId(Uri docUri, String target) {
         try {
@@ -620,11 +732,144 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         return dot > 0 ? fileName.substring(0, dot) : fileName;
     }
 
+    /** 打开录波：记住上次的文件夹，直接列 .cfg；没记录才弹目录选择。 */
+    private void pickFolder() {
+        android.content.SharedPreferences sp = getSharedPreferences("comtrade", MODE_PRIVATE);
+        String saved = sp.getString("folder_uri", null);
+        if (saved != null) {
+            Uri uri = Uri.parse(saved);
+            if (treeReadable(uri)) {
+                showCfgChooser(uri);
+                return;
+            }
+        }
+        treeListMode = true;
+        pickTree();
+    }
+
+    private boolean treeReadable(Uri treeUri) {
+        Cursor c = null;
+        try {
+            String rootId = DocumentsContract.getTreeDocumentId(treeUri);
+            Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, rootId);
+            c = getContentResolver().query(children, new String[]{
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID}, null, null, null);
+            return c != null;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (c != null) c.close();
+        }
+    }
+
+    /** 已选了某个 cfg 但找不到同名 dat 时，用它授权所在文件夹。 */
+    private void pickTreeForSibling() {
+        treeListMode = false;
+        pickTree();
+    }
+
     private void pickTree() {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
                 | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(i, REQ_TREE);
+    }
+
+    private static final class Doc {
+        final String name;
+        final Uri uri;
+
+        Doc(String name, Uri uri) {
+            this.name = name;
+            this.uri = uri;
+        }
+    }
+
+    /** 递归（<=3 层）收集目录树内的 .cfg，用于弹窗选择。 */
+    private java.util.List<Doc> listCfgInTree(Uri treeUri) {
+        java.util.List<Doc> out = new java.util.ArrayList<>();
+        String rootId = DocumentsContract.getTreeDocumentId(treeUri);
+        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>();
+        java.util.ArrayDeque<Integer> depth = new java.util.ArrayDeque<>();
+        queue.add(rootId);
+        depth.add(0);
+        while (!queue.isEmpty()) {
+            String parentId = queue.poll();
+            int level = depth.poll();
+            Cursor c = null;
+            try {
+                Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId);
+                c = getContentResolver().query(children, new String[]{
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_MIME_TYPE}, null, null, null);
+                if (c == null) continue;
+                while (c.moveToNext()) {
+                    String id = c.getString(0);
+                    String name = c.getString(1);
+                    String mime = c.getString(2);
+                    if (name == null) continue;
+                    if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
+                        if (level < 3) {
+                            queue.add(id);
+                            depth.add(level + 1);
+                        }
+                    } else if (name.toLowerCase(Locale.US).endsWith(".cfg")) {
+                        out.add(new Doc(name, DocumentsContract.buildDocumentUriUsingTree(treeUri, id)));
+                    }
+                }
+            } catch (Exception ignored) {
+            } finally {
+                if (c != null) c.close();
+            }
+        }
+        java.util.Collections.sort(out, (a, b) -> a.name.compareToIgnoreCase(b.name));
+        return out;
+    }
+
+    private void showCfgChooser(Uri treeUri) {
+        final java.util.List<Doc> cfgs = listCfgInTree(treeUri);
+        if (cfgs.isEmpty()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("该文件夹内没有 .cfg 文件")
+                    .setPositiveButton("更换文件夹", (d, w) -> {
+                        treeListMode = true;
+                        pickTree();
+                    })
+                    .setNegativeButton("取消", null)
+                    .show();
+            return;
+        }
+        String[] names = new String[cfgs.size()];
+        for (int i = 0; i < cfgs.size(); i++) names[i] = cfgs.get(i).name;
+        new AlertDialog.Builder(this)
+                .setTitle("选择录波文件（共 " + cfgs.size() + " 个 .cfg）")
+                .setItems(names, (d, which) -> loadCfgDoc(cfgs.get(which), treeUri))
+                .setNeutralButton("更换文件夹", (d, w) -> {
+                    treeListMode = true;
+                    pickTree();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void loadCfgDoc(Doc cfg, Uri treeUri) {
+        String stem = stemOf(cfg.name);
+        String target = stem + ".dat";
+        Uri dat = findSiblingByChildren(cfg.uri, target);
+        if (dat == null) dat = findSiblingByFile(cfg.uri, target);
+        if (dat == null) dat = findInTree(treeUri, target);
+        if (dat == null) {
+            pendingCfgUri = cfg.uri;
+            new AlertDialog.Builder(this)
+                    .setTitle("未找到同名数据文件")
+                    .setMessage("该文件夹内没有 " + target + "，请手动选择。")
+                    .setPositiveButton("选择 .dat", (d, w) -> pickDat())
+                    .setNegativeButton("取消", null)
+                    .show();
+            return;
+        }
+        loadUri(cfg.uri, dat);
     }
 
     /** 在已授权的目录树里按名字递归查找（最多 3 层）。 */

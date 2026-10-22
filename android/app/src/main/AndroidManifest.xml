@@ -8,6 +8,12 @@
 
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- 录波分析需要读取 cfg 同目录的同名 dat -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
@@ -39,6 +45,14 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".GameActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout"
+            android:exported="false"
+            android:label="@string/game_title"
+            android:screenOrientation="portrait"
+            android:theme="@style/ScanTheme" />
 
         <activity
             android:name=".HomeActivity"

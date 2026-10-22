@@ -3,5 +3,6 @@
     <string name="app_name">PD Toolbox</string>
     <string name="calc_title">3-Phase AC Analysis</string>
     <string name="comtrade_title">COMTRADE Viewer</string>
+    <string name="game_title">Blade Mower</string>
     <string name="scan_title">Scan terminal QR</string>
 </resources>

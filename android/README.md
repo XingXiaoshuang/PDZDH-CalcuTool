@@ -1,7 +1,7 @@
 # 配电工具箱 · Android
 
 把几个配电现场常用的小工具装进一个 App，首页平铺进入。纯 Framework + Java，
-不依赖 Gradle / AndroidX / Kotlin，APK 约 420 KB。
+不依赖 Gradle / AndroidX / Kotlin，APK 约 540 KB。
 
 ![首页](picture/tool-home.png)
 
@@ -10,6 +10,7 @@
 | 三相交流分析 | 序分量、不平衡度、功率、线电压、相量图（桌面版 WinForm 的移植） |
 | 终端二维码 | 相机扫码，按六字段规范校验后弹窗显示字段与内容 |
 | 录波分析 | COMTRADE 波形查看与分析：有效值、上下峰值、谐波、向量、小电流接地判别 |
+| 转刀割草 | 绝地求生风格的小游戏（HTML5 Canvas，WebView 承载），换换脑子用 |
 
 ## 1. 三相交流分析
 
@@ -127,6 +128,31 @@
 
 方向判据的正负与 PT/CT 极性有关；若现场接线使符号相反，需按现场约定对调结论。
 
+## 4. 转刀割草（小游戏）
+
+内置的 HTML5 Canvas 小游戏，全屏 WebView 承载（`assets/game/zhuan-dao-gecao.html`），
+按**默认竖版**加载，画布自适应窗口比例。
+
+| 开始界面 | 选择英雄 |
+|---|---|
+| ![开始](picture/game-title.png) | ![选英雄](picture/game-select.png) |
+
+- 四名侠客刀法各异（刀数 / 伤害 / 生命 / 暴击 / 转速 / 刀长），选好点「空降入场」
+- 全屏无状态栏、常亮不息屏；左下角「退出」或返回键回到工具箱
+- 硬件层渲染（`LAYER_TYPE_HARDWARE`），保证 canvas 刷新顺滑
+
+## 权限说明
+
+| 权限 | 用途 |
+|---|---|
+| `READ_EXTERNAL_STORAGE`（≤ Android 12） | 读取用户选择的 COMTRADE 录波与导出 PNG |
+| `MANAGE_EXTERNAL_STORAGE`（Android 11+） | 「所有文件访问」，用于在 cfg 同目录自动匹配同名 dat、递归查找；不授予时退化为手动选择 dat |
+| `WRITE_EXTERNAL_STORAGE`（≤ Android 9） | 导出的全景图写入所选目录 |
+| `CAMERA` | 终端二维码扫码 |
+
+录波页顶部有权限条，未授权时点击即可跳转系统设置逐项开启；同时支持 SAF 目录授权，
+不依赖「所有文件访问」也能按名字匹配 dat。
+
 ## 构建
 
 ```bash
@@ -149,15 +175,17 @@ d8 8.2.x 解析到无参数名的 `MethodParameters` 属性会抛 NPE。
 - 计算核心与桌面算法逐项对齐：3 组随机工况（幅值/相位/功率，误差 < 1e-4）
 - 二维码：ZXing 同一代码路径在 JVM 上对中文二维码 PNG 做 NV21 + 中心裁剪解码，
   再走 `QrTerminalParser`；覆盖通过/空格/英文逗号/英文冒号/缺项/格式错误
-- COMTRADE：对 `COMTRADE/` 下两组样例校验通道数、采样率、时间轴
-  （279.396ms、T0@第 770 点），并与独立 Python 实现核对基波/谐波/RMS
+- COMTRADE：对 `COMTRADE/` 下的样例校验通道数、采样率、时间轴
+  （内置示例 `BAY01_0001_20260610204052_305`：12800 Hz、3585 点、约 280 ms、T0 在第 1281 点），
+  并与独立 Python 实现核对基波/谐波/RMS
 - 模拟器（Pixel 6 / Android 14）实机走查：工具箱入口、相机权限与扫码、录波加载、缩放/滚动、
-  游标拖动与 Δt、一次/二次切换、谐波与向量、小电流判别
+  游标拖动与 Δt、一次/二次切换、谐波与向量、小电流判别、全景导出、小游戏启动
 
 ## 图标
 
 `tools/gen_icon.py` 生成自适应图标：深蓝底 + 网格 + 白色工具箱 + 国网绿闪电 + 南网蓝底座
 （108dp 矢量前景 + 5 档密度 PNG + 圆形变体），预览 `icon/icon-512.png`。
+首页各工具的图形由 `ToolGlyph` 直接 Canvas 绘制，新加工具只要在枚举里补一个字形。
 
 ## 作者
 

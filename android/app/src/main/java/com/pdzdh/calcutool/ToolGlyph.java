@@ -14,6 +14,7 @@ public class ToolGlyph extends View {
     public static final int PHASOR = 0;
     public static final int QR = 1;
     public static final int WAVE = 2;
+    public static final int GAME = 3;
 
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -41,6 +42,7 @@ public class ToolGlyph extends View {
         float r = Math.min(w, h) / 2f * 0.82f;
         if (kind == PHASOR) drawPhasor(canvas, cx, cy, r);
         else if (kind == QR) drawQr(canvas, cx, cy, r);
+        else if (kind == GAME) drawGame(canvas, cx, cy, r);
         else drawWave(canvas, cx, cy, r);
     }
 
@@ -119,10 +121,36 @@ public class ToolGlyph extends View {
         canvas.drawLine(cx - r, cy + r * 0.7f, cx + r, cy + r * 0.7f, stroke);
     }
 
+    /** 转刀割草：旋转刀片 + 草地。 */
+    private void drawGame(Canvas canvas, float cx, float cy, float r) {
+        float hubY = cy - r * 0.18f;
+        stroke.setColor(0x33FFFFFF);
+        stroke.setStrokeWidth(dp(1.1f));
+        canvas.drawCircle(cx, hubY, r * 0.86f, stroke);
+
+        float br = r * 0.72f;
+        RectF oval = new RectF(cx - br, hubY - br, cx + br, hubY + br);
+        stroke.setColor(0xFFE8F0FF);
+        stroke.setStrokeWidth(dp(2.4f));
+        canvas.drawArc(oval, 200, 118, false, stroke);
+        canvas.drawArc(oval, 20, 118, false, stroke);
+
+        fill.setColor(Pal.ACCENT_AMBER);
+        canvas.drawCircle(cx, hubY, dp(2.6f), fill);
+
+        stroke.setColor(0xFF53DAAF);
+        stroke.setStrokeWidth(dp(1.5f));
+        for (int i = -1; i <= 1; i++) {
+            float bx = cx + i * r * 0.36f;
+            canvas.drawLine(bx, cy + r * 0.82f, bx + i * dp(1.5f), cy + r * 0.42f, stroke);
+        }
+    }
+
     /** 卡片底衬：圆角方块 + 轻微渐变。 */
     static int[] palette(int kind) {
         if (kind == QR) return new int[]{0x1F53DAAF, 0x0A53DAAF};
         if (kind == WAVE) return new int[]{0x1FFFB955, 0x0AFFB955};
+        if (kind == GAME) return new int[]{0x1FFF6E6E, 0x0AFF6E6E};
         return new int[]{0x1FA387FF, 0x0AA387FF};
     }
 

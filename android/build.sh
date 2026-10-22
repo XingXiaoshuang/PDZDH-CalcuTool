@@ -27,8 +27,10 @@ for f in "$BT/aapt2.exe" "$BT/zipalign.exe" "$PLATFORM"; do
   [ -e "$f" ] || { echo "missing: $f" >&2; exit 1; }
 done
 
-rm -rf build
+# 只清理上一轮产物，避免整目录递归删除
 mkdir -p "$OUT/gen" "$OUT/classes" "$OUT/dex"
+rm -f "$OUT/unsigned.apk" "$OUT/aligned.apk" "$OUT/res.zip" \
+      "$OUT/sources.txt" "$OUT/classes.txt" "$OUT/javac.log" "$NAME.apk" 2>/dev/null || true
 
 echo "[1/6] aapt2 compile"
 "$BT/aapt2.exe" compile --dir "$APP/res" -o "$OUT/res.zip"

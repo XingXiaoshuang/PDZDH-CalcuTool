@@ -47,6 +47,8 @@ public class HomeActivity extends Activity {
                     ToolGlyph.QR, ScanActivity.class),
             new Tool("录波分析", "COMTRADE · 谐波 · 有效值", "COMTRADE",
                     ToolGlyph.WAVE, ComtradeActivity.class),
+            new Tool("转刀割草", "绝地求生小游戏", "GAME",
+                    ToolGlyph.GAME, GameActivity.class),
     };
 
     @Override
