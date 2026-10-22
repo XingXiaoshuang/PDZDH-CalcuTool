@@ -4,50 +4,26 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- reference ring -->
+    <!-- 蓝色底座（南网蓝） -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#2E2A46"
-        android:strokeWidth="1.2"
-        android:pathData="M21.40,54.00 a32.60,32.60 0 1,0 65.20,0 a32.60,32.60 0 1,0 -65.20,0" />
-    <!-- tip triangle -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#1AFFFFFF"
-        android:strokeWidth="1.1"
-        android:pathData="M54.00,29.60 L54.00,29.60 L32.87,66.20 L75.13,66.20 Z" />
-    <!-- 90 deg phasor -->
+        android:fillColor="#1E76D9"
+        android:pathData="M28,60 L80,60 L80,69 A7,7 0 0 1 73,76 L35,76 A7,7 0 0 1 28,69 Z" />
+    <!-- 箱体 -->
     <path
         android:fillColor="@android:color/transparent"
-        android:strokeColor="#FFFFD24A"
-        android:strokeWidth="4.6"
-        android:strokeLineCap="round"
-        android:pathData="M54.00,54.00 L54.00,36.40" />
-    <path
-        android:fillColor="#FFFFD24A"
-        android:pathData="M54.00,29.60 L58.40,36.40 L49.60,36.40 Z" />
-    <!-- 210 deg phasor -->
+        android:strokeColor="#EAF4FF"
+        android:strokeWidth="3.4"
+        android:strokeLineJoin="round"
+        android:pathData="M35,41 L73,41 A7,7 0 0 1 80,48 L80,69 A7,7 0 0 1 73,76 L35,76 A7,7 0 0 1 28,69 L28,48 A7,7 0 0 1 35,41 Z" />
+    <!-- 提手 -->
     <path
         android:fillColor="@android:color/transparent"
-        android:strokeColor="#FF53DAAF"
-        android:strokeWidth="4.6"
+        android:strokeColor="#EAF4FF"
+        android:strokeWidth="3.4"
         android:strokeLineCap="round"
-        android:pathData="M54.00,54.00 L38.76,62.80" />
+        android:pathData="M45,50 L45,32.8 A2.8,2.8 0 0 1 63,32.8 L63,50" />
+    <!-- 闪电（国网绿） -->
     <path
-        android:fillColor="#FF53DAAF"
-        android:pathData="M32.87,66.20 L36.56,58.99 L40.96,66.61 Z" />
-    <!-- 330 deg phasor -->
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FFFF7A6B"
-        android:strokeWidth="4.6"
-        android:strokeLineCap="round"
-        android:pathData="M54.00,54.00 L69.24,62.80" />
-    <path
-        android:fillColor="#FFFF7A6B"
-        android:pathData="M75.13,66.20 L67.04,66.61 L71.44,58.99 Z" />
-    <!-- neutral hub -->
-    <path
-        android:fillColor="#12101B"
-        android:pathData="M50.10,54 a3.9,3.9 0 1,0 7.8,0 a3.9,3.9 0 1,0 -7.8,0 Z" />
+        android:fillColor="#00B45A"
+        android:pathData="M57.5,43.5 M47.5,58.5 M53.5,58.5 M50.5,72 M62.5,56.5 M56,56.5 Z" />
 </vector>

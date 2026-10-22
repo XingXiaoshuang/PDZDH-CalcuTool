@@ -21,7 +21,7 @@ fi
 
 APP=app/src/main
 OUT=build/release
-NAME="PDZDH-CalcuTool-1.1"
+NAME="PDZDH-Toolbox-1.2"
 
 for f in "$BT/aapt2.exe" "$BT/zipalign.exe" "$PLATFORM"; do
   [ -e "$f" ] || { echo "missing: $f" >&2; exit 1; }
@@ -39,11 +39,12 @@ echo "[2/6] aapt2 link"
   -I "$PLATFORM" \
   --manifest "$APP/AndroidManifest.xml" \
   -R "$OUT/res.zip" \
+  -A "$APP/assets" \
   --java "$OUT/gen" \
   --min-sdk-version 24 \
   --target-sdk-version 34 \
   --version-code 2 \
-  --version-name 1.1-android \
+  --version-name 1.2-android \
   --auto-add-overlay
 
 echo "[3/6] javac"

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">3-Phase AC Analyzer</string>
+    <string name="app_name">PD Toolbox</string>
+    <string name="calc_title">3-Phase AC Analysis</string>
+    <string name="comtrade_title">COMTRADE Viewer</string>
     <string name="scan_title">Scan terminal QR</string>
 </resources>

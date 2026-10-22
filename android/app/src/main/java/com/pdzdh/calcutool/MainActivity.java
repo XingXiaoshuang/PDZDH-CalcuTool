@@ -113,16 +113,18 @@ public class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int) dp(16), (int) dp(11), (int) dp(12), (int) dp(11));
 
-        TextView badge = new TextView(this);
-        badge.setText("Y");
-        badge.setTextSize(15);
-        badge.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
-        badge.setTextColor(Pal.ACCENT_PURPLE);
-        badge.setGravity(Gravity.CENTER);
-        badge.setBackground(rounded(Pal.BG_ELEVATED, 10, Pal.BORDER_MID, 1));
+        TextView back = new TextView(this);
+        back.setText("←");
+        back.setTextSize(17);
+        back.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        back.setTextColor(Pal.ACCENT_PURPLE);
+        back.setGravity(Gravity.CENTER);
+        back.setBackground(rounded(Pal.BG_ELEVATED, 10, Pal.BORDER_MID, 1));
+        back.setOnClickListener(v -> finish());
+        back.setContentDescription("返回工具箱");
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams((int) dp(30), (int) dp(30));
         bp.setMarginEnd((int) dp(10));
-        row.addView(badge, bp);
+        row.addView(back, bp);
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
