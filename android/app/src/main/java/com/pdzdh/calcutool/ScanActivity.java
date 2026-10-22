@@ -6,13 +6,17 @@ import android.app.Dialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.ImageFormat;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.Camera;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.SpannableString;
@@ -32,16 +36,11 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.zxing.BinaryBitmap;
-import com.google.zxing.ChecksumException;
 import com.google.zxing.DecodeHintType;
-import com.google.zxing.FormatException;
-import com.google.zxing.NotFoundException;
 import com.google.zxing.PlanarYUVLuminanceSource;
-import com.google.zxing.Result;
-import com.google.zxing.common.HybridBinarizer;
-import com.google.zxing.qrcode.QRCodeReader;
+import com.google.zxing.RGBLuminanceSource;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -50,10 +49,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** 相机扫码：读取配电终端二维码，按表 5 校验后展示字段与内容。 */
+/** 相机 / 相册扫码：读取配电终端二维码，按六字段规范校验后展示字段与内容。 */
 public class ScanActivity extends Activity implements Camera.PreviewCallback {
 
     private static final int REQ_CAMERA = 4101;
+    private static final int REQ_PICK_IMAGE = 4102;
 
     private SurfaceView previewView;
     private TextView torchBtn;
@@ -65,8 +65,9 @@ public class ScanActivity extends Activity implements Camera.PreviewCallback {
 
     private final AtomicBoolean busy = new AtomicBoolean(false);
     private volatile boolean paused;
+    /** 正在识别相册图片：期间忽略相机帧，避免连弹两个结果框。 */
+    private volatile boolean decodingImage;
     private ExecutorService worker;
-    private final QRCodeReader reader = new QRCodeReader();
     private Map<DecodeHintType, Object> hints;
     private float density;
     /** 由其它应用分享进来的文本（微信/记事本等），只在首次展示时校验一次。 */
@@ -80,7 +81,7 @@ public class ScanActivity extends Activity implements Camera.PreviewCallback {
 
         hints = new EnumMap<>(DecodeHintType.class);
         hints.put(DecodeHintType.TRY_HARDER, Boolean.TRUE);
-        hints.put(DecodeHintType.CHARACTER_SET, "UTF-8");
+        // 不指定 CHARACTER_SET：让 ZXing 先猜，再由 QrTextDecoder 按字节段做中文编码自适应
         List<com.google.zxing.BarcodeFormat> formats = new ArrayList<>();
         formats.add(com.google.zxing.BarcodeFormat.QR_CODE);
         hints.put(DecodeHintType.POSSIBLE_FORMATS, formats);
@@ -104,7 +105,7 @@ public class ScanActivity extends Activity implements Camera.PreviewCallback {
         sharedText = null;
         paused = true;
         getWindow().getDecorView().postDelayed(
-                () -> showResultDialog(QrTerminalParser.parse(text)), 320);
+                () -> showResultDialog(QrTerminalParser.parse(text), QrTextDecoder.ofText(text)), 320);
     }
 
     /** 其它应用通过「分享 → 扫描终端二维码」传入的内容。 */
@@ -155,6 +156,13 @@ public class ScanActivity extends Activity implements Camera.PreviewCallback {
         tp.setMarginStart((int) dp(10));
         top.addView(title, tp);
 
+        TextView album = pill("相册", 11);
+        album.setOnClickListener(v -> pickImage());
+        album.setContentDescription("从相册选择二维码图片");
+        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams((int) dp(46), (int) dp(36));
+        ap.setMarginEnd((int) dp(8));
+        top.addView(album, ap);
+
         torchBtn = pill("⚡", 16);
         torchBtn.setOnClickListener(v -> toggleTorch());
         top.addView(torchBtn, new LinearLayout.LayoutParams((int) dp(40), (int) dp(36)));
@@ -175,6 +183,14 @@ public class ScanActivity extends Activity implements Camera.PreviewCallback {
         statusText.setTypeface(Typeface.MONOSPACE);
         statusText.setGravity(Gravity.CENTER);
         bottom.addView(statusText);
+
+        TextView tip = new TextView(this);
+        tip.setText("扫不出来时点右上「相册」选图 · 中文编码自动识别（UTF-8 / GB18030 / BIG5）");
+        tip.setTextColor(Pal.TEXT_MUTED);
+        tip.setTextSize(9);
+        tip.setGravity(Gravity.CENTER);
+        tip.setPadding(0, (int) dp(4), 0, 0);
+        bottom.addView(tip);
 
         TextView manual = new TextView(this);
         manual.setText("手动输入 / 粘贴内容");
@@ -345,7 +361,7 @@ public class ScanActivity extends Activity implements Camera.PreviewCallback {
     @Override
     public void onPreviewFrame(final byte[] data, Camera cam) {
         if (data == null) return;
-        if (paused || busy.get()) {
+        if (paused || decodingImage || busy.get()) {
             try {
                 cam.addCallbackBuffer(data);
             } catch (Exception ignored) {
@@ -363,14 +379,11 @@ public class ScanActivity extends Activity implements Camera.PreviewCallback {
                 int top = (h - side) / 2;
                 PlanarYUVLuminanceSource src =
                         new PlanarYUVLuminanceSource(frame, w, h, left, top, side, side, false);
-                BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(src));
-                Result r = reader.decode(bitmap, hints);
-                onDecoded(r.getText());
-            } catch (NotFoundException | ChecksumException | FormatException ignored) {
-                // not a QR frame yet
-            } catch (RuntimeException ignored) {
+                QrTextDecoder.Decoded d = QrCodec.decode(src, hints, false);
+                onDecoded(d);
+            } catch (Exception ignored) {
+                // 这一帧没有可用二维码，继续下一帧
             } finally {
-                reader.reset();
                 busy.set(false);
                 if (camera != null) {
                     try {
@@ -382,7 +395,7 @@ public class ScanActivity extends Activity implements Camera.PreviewCallback {
         });
     }
 
-    private void onDecoded(final String text) {
+    private void onDecoded(final QrTextDecoder.Decoded decoded) {
         runOnUiThread(() -> {
             if (isFinishing()) return;
             paused = true;
@@ -392,13 +405,120 @@ public class ScanActivity extends Activity implements Camera.PreviewCallback {
                 } catch (Exception ignored) {
                 }
             }
-            showResultDialog(QrTerminalParser.parse(text));
+            statusText.setText("");
+            showResultDialog(QrTerminalParser.parse(decoded.text), decoded);
         });
+    }
+
+    // ── 相册图片识别 ────────────────────────────────────────────────────────────
+
+    private void pickImage() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        try {
+            startActivityForResult(Intent.createChooser(intent, "选择二维码图片"), REQ_PICK_IMAGE);
+        } catch (Exception e) {
+            Toast.makeText(this, "没有可用的图片选择器", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_PICK_IMAGE) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        final Uri uri = data.getData();
+        decodingImage = true;
+        statusText.setTextColor(Pal.TEXT_MUTED);
+        statusText.setText("正在识别图片…");
+        worker.execute(() -> {
+            QrTextDecoder.Decoded decoded = null;
+            String error = null;
+            try {
+                decoded = decodeImage(uri);
+            } catch (Exception e) {
+                error = e.getClass().getSimpleName();
+            }
+            final QrTextDecoder.Decoded d = decoded;
+            final String err = error;
+            runOnUiThread(() -> {
+                decodingImage = false;
+                if (isFinishing()) return;
+                statusText.setTextColor(Pal.TEXT_MUTED);
+                statusText.setText("终端类型 / 厂商代码 / 终端型号 / ID号 / 硬件版本 / 生产日期");
+                if (d != null) {
+                    paused = true;
+                    if (camera != null) {
+                        try {
+                            camera.setPreviewCallbackWithBuffer(null);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    showResultDialog(QrTerminalParser.parse(d.text), d);
+                } else {
+                    statusText.setTextColor(Pal.ACCENT_RED);
+                    statusText.setText("图片里没有识别到二维码" + (err == null ? "" : "（" + err + "）"));
+                    Toast.makeText(this, "未识别到二维码，换一张清晰的正面图试试",
+                            Toast.LENGTH_LONG).show();
+                }
+            });
+        });
+    }
+
+    /** 图片解码：正片 + 反相（白码黑底）各试一遍。 */
+    private QrTextDecoder.Decoded decodeImage(Uri uri) throws Exception {
+        Bitmap bmp = loadBitmap(uri, 2000);
+        if (bmp == null) throw new IllegalArgumentException("图片读取失败");
+        int w = bmp.getWidth();
+        int h = bmp.getHeight();
+        int[] px = new int[w * h];
+        bmp.getPixels(px, 0, w, 0, 0, w, h);
+        bmp.recycle();
+
+        Exception last = null;
+        try {
+            return QrCodec.decode(new RGBLuminanceSource(w, h, px), hints);
+        } catch (Exception e) {
+            last = e;
+        }
+        int[] inverted = new int[px.length];
+        for (int i = 0; i < px.length; i++) inverted[i] = 0xFF000000 | (~px[i] & 0xFFFFFF);
+        try {
+            return QrCodec.decode(new RGBLuminanceSource(w, h, inverted), hints);
+        } catch (Exception e) {
+            last = e;
+        }
+        throw last == null ? new IllegalStateException("未识别") : last;
+    }
+
+    private Bitmap loadBitmap(Uri uri, int maxDim) {
+        try {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                BitmapFactory.decodeStream(in, null, bounds);
+            }
+            int sample = 1;
+            while (bounds.outWidth > 0 && bounds.outHeight > 0
+                    && Math.max(bounds.outWidth, bounds.outHeight) / sample > maxDim) {
+                sample *= 2;
+            }
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = sample;
+            opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                return BitmapFactory.decodeStream(in, null, opts);
+            }
+        } catch (Exception | OutOfMemoryError e) {
+            return null;
+        }
     }
 
     // ── 弹窗 ────────────────────────────────────────────────────────────────────
 
-    private void showResultDialog(final QrTerminalParser.Result r) {
+    private void showResultDialog(final QrTerminalParser.Result r,
+                                  final QrTextDecoder.Decoded decoded) {
         final Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
@@ -428,7 +548,8 @@ public class ScanActivity extends Activity implements Camera.PreviewCallback {
         card.addView(head);
 
         TextView rule = new TextView(this);
-        rule.setText("仅接受中文逗号「，」与中文冒号「：」，不允许空格与英文标点");
+        String charsetNote = "编码 " + decoded.charset + (decoded.repaired ? "（已自动纠正）" : "");
+        rule.setText("仅接受中文逗号「，」与中文冒号「：」，不允许空格与英文标点 · " + charsetNote);
         rule.setTextColor(Pal.TEXT_MUTED);
         rule.setTextSize(9.5f);
         rule.setPadding(0, (int) dp(4), 0, (int) dp(10));
@@ -652,7 +773,8 @@ public class ScanActivity extends Activity implements Camera.PreviewCallback {
             InputMethodManager im = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
             if (im != null) im.hideSoftInputFromWindow(input.getWindowToken(), 0);
             dialog.dismiss();
-            showResultDialog(QrTerminalParser.parse(input.getText().toString()));
+            String text = input.getText().toString();
+            showResultDialog(QrTerminalParser.parse(text), QrTextDecoder.ofText(text));
         });
         footer.addView(ok, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
