@@ -21,6 +21,8 @@ public final class SmallCurrentDetector {
         public double p0 = 0;
         public double phiDeg = 0;
         public double cosPhi = 0;
+        /** 参与积分的首半波宽度（ms）。 */
+        public double halfCycleMs = 0;
 
         public double u0SteadyRms = 0;
         public double u0Max = 0;
@@ -85,16 +87,24 @@ public final class SmallCurrentDetector {
         r.onsetIndex = onset;
         r.onsetTimeMs = c.time[onset] * 1000;
 
-        // 2. 突变后一个周波的基波零序电压/电流与相位差
-        int from = Math.max(0, Math.min(onset, c.sampleCount - cyc));
-        int to = Math.min(c.sampleCount, from + cyc);
-        double[] tu = WaveMath.tone(u, from, to, f0, fs);
-        double[] ti = WaveMath.tone(i0, from, to, f0, fs);
-        r.u0FaultRms = tu[0];
-        r.i0FaultRms = ti[0];
+        // 2. 突变后“首半波”的瞬时功率积分：P0 = (1/T_half)∫u0·i0 dt
+        int half = Math.max(2, cyc / 2);
+        int from = Math.max(0, Math.min(onset, c.sampleCount - 1));
+        int hTo = Math.min(c.sampleCount, from + half);
+        int n = hTo - from;
+        double sum = 0;
+        for (int k = from; k < hTo; k++) sum += (double) u[k] * i0[k];
+        r.p0 = n > 0 ? sum / n : 0;
+        r.u0FaultRms = WaveMath.rms(u, from, hTo);
+        r.i0FaultRms = WaveMath.rms(i0, from, hTo);
+        r.halfCycleMs = n / fs * 1000.0;
+
+        // 基波相位差作为辅助信息（整周波）
+        int fTo = Math.min(c.sampleCount, from + cyc);
+        double[] tu = WaveMath.tone(u, from, fTo, f0, fs);
+        double[] ti = WaveMath.tone(i0, from, fTo, f0, fs);
         r.phiDeg = WaveMath.norm(tu[1] - ti[1]);
         r.cosPhi = Math.cos(Math.toRadians(r.phiDeg));
-        r.p0 = tu[0] * ti[0] * r.cosPhi;
 
         // 3. 其后 10 个周波的稳态零序电压
         int steadyFrom = onset + 10 * cyc;
@@ -109,11 +119,10 @@ public final class SmallCurrentDetector {
         // 4. 结论
         StringBuilder sb = new StringBuilder();
         sb.append(String.format(Locale.US,
-                "突变时刻 %.2fms（第 %d 点）\n零序电压 %.2f，零序电流 %.2f\n"
-                        + "零序功率 %.2f，φ=%.1f°，cosφ=%.2f\n"
-                        + "10 周波后零序电压 %.2f（%s）",
-                r.onsetTimeMs, onset + 1, r.u0FaultRms, r.i0FaultRms,
-                r.p0, r.phiDeg, r.cosPhi, r.u0SteadyRms,
+                "突变时刻 %.2fms（第 %d 点）\n首半波 %.1fms 积分零序功率 %.3f\n"
+                        + "φ=%.1f°，cosφ=%.2f，10 周波后零序电压 %.2f（%s）",
+                r.onsetTimeMs, onset + 1, r.halfCycleMs, r.p0,
+                r.phiDeg, r.cosPhi, r.u0SteadyRms,
                 r.steadyPresent ? "持续存在" : "已衰减"));
         r.detail = sb.toString();
 

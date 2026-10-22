@@ -27,6 +27,7 @@ import com.pdzdh.calcutool.comtrade.WaveformView;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Locale;
 
 /** 录波分析：读取 COMTRADE cfg/dat，绘制波形并给出有效值、谐波、向量等分析。 */
@@ -34,6 +35,8 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
 
     private static final int REQ_CFG = 5101;
     private static final int REQ_DAT = 5102;
+    private static final int REQ_TREE = 5103;
+    private static final int REQ_EXPORT = 5104;
     private static final int HARMONIC_ORDER = 19;
 
     private ComtradeCase data;
@@ -249,8 +252,9 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
             Toast.makeText(this, chart.showT0() ? "显示 0 时刻标线" : "隐藏 0 时刻标线",
                     Toast.LENGTH_SHORT).show();
         }));
+        row.addView(tool("导出", v -> exportPng()));
         TextView hint = new TextView(this);
-        hint.setText("拖动平移 · 捏合缩放 · 双击复位");
+        hint.setText("拖动平移 · 捏合缩放");
         hint.setTextColor(Pal.TEXT_MUTED);
         hint.setTextSize(8);
         hint.setTypeface(Typeface.MONOSPACE);
@@ -389,6 +393,48 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
 
     // ── 文件读取 ─────────────────────────────────────────────────────────────
 
+    /** 导出整段录波的全景高清图（全部通道 + 厂家/采样信息）。 */
+    private void exportPng() {
+        if (data == null) {
+            Toast.makeText(this, "请先打开录波文件", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("image/png");
+        i.putExtra(Intent.EXTRA_TITLE, "shot_" + stemOf(data.cfgName) + ".png");
+        startActivityForResult(i, REQ_EXPORT);
+    }
+
+    private void writeExport(final Uri uri) {
+        final ComtradeCase c = data;
+        if (c == null) return;
+        final boolean primary = chart.isPrimary();
+        final boolean digital = true;   // 导出始终包含数字量通道（全部通道全景）
+        final double a = chart.cursorA(), b = chart.cursorB();
+        final String title = c.cfgName.replace(".cfg", "");
+        Toast.makeText(this, "正在生成图片…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            android.graphics.Bitmap bmp = null;
+            try {
+                bmp = com.pdzdh.calcutool.comtrade.ComtradeExporter
+                        .render(c, primary, digital, a, b, title);
+                OutputStream os = getContentResolver().openOutputStream(uri);
+                if (os == null) throw new Exception("无法写入目标文件");
+                bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, os);
+                os.flush();
+                os.close();
+                runOnUiThread(() -> Toast.makeText(this,
+                        "已导出 " + title + " 全景图", Toast.LENGTH_LONG).show());
+            } catch (final Exception e) {
+                runOnUiThread(() -> Toast.makeText(this,
+                        "导出失败：" + e.getMessage(), Toast.LENGTH_LONG).show());
+            } finally {
+                if (bmp != null) bmp.recycle();
+            }
+        }).start();
+    }
+
     private void pickCfg() {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -414,19 +460,39 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         } catch (Exception ignored) {
         }
 
+        if (req == REQ_EXPORT) {
+            writeExport(uri);
+            return;
+        }
         if (req == REQ_CFG) {
             pendingCfgUri = uri;
             Uri dat = findSibling(uri, ".dat");
             if (dat == null) {
                 new AlertDialog.Builder(this)
-                        .setTitle("未找到同名数据文件")
-                        .setMessage("没有在 cfg 同目录找到同名 .dat。\n请手动选择对应的数据文件。")
-                        .setPositiveButton("选择 .dat", (d, w) -> pickDat())
+                        .setTitle("未自动找到同名 .dat")
+                        .setMessage("Android 的文件权限只授予单个文件，因此无法直接读取同目录的 .dat。\n"
+                                + "授权该文件夹后即可自动匹配（只需一次）。")
+                        .setPositiveButton("授权文件夹", (d, w) -> pickTree())
+                        .setNeutralButton("手动选择 .dat", (d, w) -> pickDat())
                         .setNegativeButton("取消", null)
                         .show();
                 return;
             }
             loadUri(uri, dat);
+        } else if (req == REQ_TREE) {
+            if (pendingCfgUri == null) return;
+            String stem = stemOf(displayName(pendingCfgUri));
+            Uri dat = findInTree(uri, stem + ".dat");
+            if (dat == null) {
+                new AlertDialog.Builder(this)
+                        .setTitle("未找到同名数据文件")
+                        .setMessage("所选文件夹内未找到 " + stem + ".dat，请手动选择。")
+                        .setPositiveButton("选择 .dat", (d, w) -> pickDat())
+                        .setNegativeButton("取消", null)
+                        .show();
+                return;
+            }
+            loadUri(pendingCfgUri, dat);
         } else if (req == REQ_DAT) {
             if (pendingCfgUri == null) {
                 Toast.makeText(this, "请先选择 cfg 文件", Toast.LENGTH_SHORT).show();
@@ -494,20 +560,25 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         return s == null ? "COMTRADE" : s;
     }
 
-    /** 通过 DocumentsContract 在同目录内找同名 .dat。 */
+    /** 通过 DocumentsContract 在同目录内找同名 .dat；失败时尝试直接改 documentId。 */
     private Uri findSibling(Uri docUri, String ext) {
+        String stem = stemOf(displayName(docUri));
+        String target = stem + ext;
+        Uri byChild = findSiblingByChildren(docUri, target);
+        if (byChild != null) return byChild;
+        return findSiblingByDocId(docUri, target);
+    }
+
+    private Uri findSiblingByChildren(Uri docUri, String target) {
+        Cursor c = null;
         try {
             String docId = DocumentsContract.getDocumentId(docUri);
             int slash = docId.lastIndexOf('/');
             if (slash <= 0) return null;
             String parentId = docId.substring(0, slash);
-            String file = docId.substring(slash + 1);
-            int dot = file.lastIndexOf('.');
-            String target = (dot > 0 ? file.substring(0, dot) : file) + ext;
-
             Uri treeDoc = DocumentsContract.buildTreeDocumentUri(docUri.getAuthority(), docId);
             Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeDoc, parentId);
-            Cursor c = getContentResolver().query(children, new String[]{
+            c = getContentResolver().query(children, new String[]{
                     DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                     DocumentsContract.Document.COLUMN_DISPLAY_NAME}, null, null, null);
             if (c == null) return null;
@@ -515,12 +586,83 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
                 String name = c.getString(1);
                 if (name != null && name.equalsIgnoreCase(target)) {
                     String id = c.getString(0);
-                    c.close();
                     return DocumentsContract.buildDocumentUriUsingTree(treeDoc, id);
                 }
             }
-            c.close();
         } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        return null;
+    }
+
+    /** externalstorage 等 provider 的 documentId 形如 primary:dir/file，可直接换文件名。 */
+    private Uri findSiblingByDocId(Uri docUri, String target) {
+        try {
+            String docId = DocumentsContract.getDocumentId(docUri);
+            int slash = docId.lastIndexOf('/');
+            if (slash <= 0) return null;
+            String siblingId = docId.substring(0, slash + 1) + target;
+            Uri uri = DocumentsContract.buildDocumentUri(docUri.getAuthority(), siblingId);
+            InputStream in = getContentResolver().openInputStream(uri);
+            if (in != null) {
+                in.close();
+                return uri;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static String stemOf(String fileName) {
+        if (fileName == null) return "";
+        int dot = fileName.lastIndexOf('.');
+        return dot > 0 ? fileName.substring(0, dot) : fileName;
+    }
+
+    private void pickTree() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(i, REQ_TREE);
+    }
+
+    /** 在已授权的目录树里按名字递归查找（最多 3 层）。 */
+    private Uri findInTree(Uri treeUri, String target) {
+        String rootId = DocumentsContract.getTreeDocumentId(treeUri);
+        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>();
+        java.util.ArrayDeque<Integer> depth = new java.util.ArrayDeque<>();
+        queue.add(rootId);
+        depth.add(0);
+        while (!queue.isEmpty()) {
+            String parentId = queue.poll();
+            int level = depth.poll();
+            Cursor c = null;
+            try {
+                Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId);
+                c = getContentResolver().query(children, new String[]{
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_MIME_TYPE}, null, null, null);
+                if (c == null) continue;
+                while (c.moveToNext()) {
+                    String id = c.getString(0);
+                    String name = c.getString(1);
+                    String mime = c.getString(2);
+                    if (name == null) continue;
+                    if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
+                        if (level < 3) {
+                            queue.add(id);
+                            depth.add(level + 1);
+                        }
+                    } else if (name.equalsIgnoreCase(target)) {
+                        return DocumentsContract.buildDocumentUriUsingTree(treeUri, id);
+                    }
+                }
+            } catch (Exception ignored) {
+            } finally {
+                if (c != null) c.close();
+            }
         }
         return null;
     }
@@ -929,9 +1071,10 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
 
         String[] rows = {
                 String.format(Locale.US, "突变时刻   %.2f ms（第 %d 点）", r.onsetTimeMs, r.onsetIndex + 1),
-                String.format(Locale.US, "零序电压   %.2f V（有效值）", r.u0FaultRms * fu),
-                String.format(Locale.US, "零序电流   %.3f A（有效值）", r.i0FaultRms * fi),
-                String.format(Locale.US, "瞬时零序功率 %.3f W", r.p0 * fu * fi),
+                String.format(Locale.US, "首半波宽度 %.1f ms（突变后 0.5 周波）", r.halfCycleMs),
+                String.format(Locale.US, "零序电压   %.2f V（半波有效值）", r.u0FaultRms * fu),
+                String.format(Locale.US, "零序电流   %.3f A（半波有效值）", r.i0FaultRms * fi),
+                String.format(Locale.US, "零序功率   %.3f W（首半波瞬时积分）", r.p0 * fu * fi),
                 String.format(Locale.US, "相位差 φ   %.1f°，cosφ %.2f", r.phiDeg, r.cosPhi),
                 String.format(Locale.US, "10 周波后 零序电压 %.2f V（%s）",
                         r.u0SteadyRms * fu, r.steadyPresent ? "持续存在" : "已衰减"),
@@ -948,7 +1091,7 @@ public class ComtradeActivity extends Activity implements WaveformView.Listener 
         analysisBox.addView(card);
 
         TextView tip = new TextView(this);
-        tip.setText("判据：零序电压突变后一个周波的基波零序功率方向（负为线路流向母线 → 界内），"
+        tip.setText("判据：零序电压突变后首半波的瞬时零序功率积分方向（负为线路流向母线 → 界内），"
                 + "并结合其后 10 个周波稳态零序电压是否持续；零序通道按相别 Z / 名称自动预选，可手动更改。");
         tip.setTextColor(Pal.TEXT_MUTED);
         tip.setTextSize(9);
